@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+#rec_text {
+  display: inline-block;
+}
+
+#owned_table, #header_text, label, select {
+  font-family: 'Trebuchet MS', Arial, Helvetica, sans-serif;
+  border-collapse: collapse;
+}
+
+#owned_table {
+  width: 900px;
+}
+
+#owned_table td {
+  border: 1px solid #808080;
+}
+
+#owned_table td, #owned_table th {
+  padding: 8px;
+}
+
+#owned_table tr:nth-child(even) {
+	background-color: #f2f2f2;}
+
+#owned_table tr:hover {background-color: #ddd;}
+
+#owned_table th {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  text-align: left;
+  background-color: #4CAF50;
+  color: white;
+}
+</style>
+</head>
+<body>
+
+<h1 id='header_text'>Sneaker Portfolio</h1>
+
+<h4 id='rec_text'>View Recommendations -- I am a sneaker...</h1>
+
+<button type='button' id='collector'>Collector</button>
+
+<button type='button' id='investor'>Investor</button>
+
+
+<p style='padding: 0 4em 0'></p>
+
+<form action='/add_owned_sneaker' method='post'>
+  <label for='sneaker_select'>Sneaker</label>
+  <select id='sneaker_select' name='sneaker_select'>
+    {% for shoe in all_shoes %}
+    <option>{{shoe['Model Name'] | format_model_name}}</option>
+    {% endfor %}
+  </select>
+  <label for='size_select'>Size</label>
+  <select id='size_select' name='size_select'></select>
+  <button type='submit' id='add_sneaker'>Add to Portfolio</button>
+</form>
+
+<p style='padding: 0 4em 0'></p>
+
+<table id='owned_table'>
+	<tr>
+		<th align='left'>Model</th>
+    <th align='left'>Size</th>
+    <th align='left'>Action</th>
+	</tr>
+	{% for shoe in owned %}
+	<tr>
+		<td>{{shoe['model'] | format_model_name}}</td>
+    <td>{{shoe['size']}}</td>
+    <td>
+      <form action='/remove_owned_sneaker' method='POST'>
+        <input id='owned_id' name='owned_id' type='hidden' value='{{shoe.id}}'>
+        <button type='submit' align='left'>Remove</button>
+      </form>
+    </td>
+	</tr>
+	{% endfor %}
+</table>
+
+<script type='text/javascript'>
+var size_select = document.getElementById('size_select');
+for (var i = 4; i <= 14; i += 0.5) {
+  size_select.options[size_select.options.length] = new Option('' + i, i);
+}
+
+var elements = document.getElementById('owned_table').getElementsByTagName('tbody')[0];
+elements.onclick = function(e) {
+  e = e || window.event;
+  var data = [];
+  var target = e.srcElement || e.target;
+  while (target && target.nodeName !== 'TR') {
+      target = target.parentNode;
+  }
+  window.location = '/sneaker/' + target.getElementsByTagName('td')[0].innerHTML;
+};
+
+var collector = document.getElementById('collector');
+collector.onclick = function(e) {
+  window.location = '/recommendations/collector';
+};
+
+var investor = document.getElementById('investor');
+investor.onclick = function(e) {
+  window.location = '/recommendations/investor';
+};
+</script>
+
+</body>
+</html>

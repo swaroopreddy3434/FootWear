@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<script src="{{url_for('static', filename='js/d3.v5.min.js')}}"></script>
+<html>
+<head>
+<style>
+h1, h2, text {
+  font-family: 'Trebuchet MS', Arial, Helvetica, sans-serif;
+  border-collapse: collapse;
+  width: 100%;
+}
+#sales_table{
+  font-family: 'Trebuchet MS', Arial, Helvetica, sans-serif;
+  border-collapse: collapse;
+  width: 900px;
+}
+
+#sales_table td {
+  border: 1px solid #808080;
+}
+
+#sales_table td, #sales_table th {
+  padding: 8px;
+}
+
+#sales_table tr:nth-child(even) {
+  background-color: #f2f2f2;}
+
+#sales_table tr:hover {background-color: #ddd;}
+
+#sales_table th {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  text-align: left;
+  background-color: #4CAF50;
+  color: white;
+}
+</style>
+</head>
+<body>
+
+<h1>{{model | format_model_name}}</h1>
+
+<button type='button' id='portfolio_button'>View Portfolio</button>
+
+<h2>Sales History</h2>
+
+<script>
+var sales = {{ sales | tojson }};
+var predictions = {{ predictions | tojson }};
+var maxDays = 0;
+var lastEntry = 0;
+sales.forEach(function(sale) {
+  if (sale['Day After Release'] > maxDays) {
+    maxDays = sale['Day After Release'];
+    lastEntry = sale;
+  }
+});
+
+//Create new set of only predictions after the last sale to make graph pretty
+var graphedPredictions = [];
+graphedPredictions.push(lastEntry);
+predictions.forEach(function(prediction) {
+  var splitDate = prediction['date'].split('/');
+  var splitRelease = sales[0]['Release Date'].split('/');
+  var daysAfter = (new Date(parseInt(splitDate[0]), parseInt(splitDate[1]), parseInt(splitDate[2]))
+      - new Date(parseInt(splitRelease[2]), parseInt(splitRelease[0]), parseInt(splitRelease[1]))) / 86400000;
+  if (daysAfter > maxDays) {
+    prediction['Day After Release'] = daysAfter;
+    graphedPredictions.push(prediction);
+  }
+});
+
+var svgWidth = 900;
+var svgHeight = 400;
+var padding = {t: 20, r: 40, b: 60, l: 60};
+
+var svg = d3.select('body')
+  .append('svg')
+  .attr('width', svgWidth)
+  .attr('height', svgHeight);
+
+// Compute chart dimensions
+var chartWidth = svgWidth - padding.l - padding.r;
+var chartHeight = svgHeight - padding.t - padding.b;
+
+var dayScale = d3.scaleLinear()
+  .domain([d3.min(sales, function(d) { return d['Day After Release']; }), d3.max(predictions, function(d) { return d['Day After Release']; })])
+  .range([padding.l, chartWidth + padding.l]);
+var priceScale = d3.scaleLinear()
+  .domain(d3.extent(sales, function(d) { return parseInt(d['Sale Price'].substring(1).replace(/,/g, "")); }))
+  .range([chartHeight + padding.t, padding.t]);
+
+svg.selectAll('.point')
+  .data(sales)
+  .enter()
+  .append('circle')
+  .attr('class', 'point')
+  .attr('r', 2)
+  .attr('cx', function(d) {
+    return dayScale(d['Day After Release']);
+  })
+  .attr('cy', function(d) {
+    return priceScale(parseInt(d['Sale Price'].substring(1).replace(/,/g, "")));
+  })
+  .style('fill', 'grey');
+
+svg.append('g')
+  .attr('class', 'axis')
+  .attr('transform', 'translate(0,' + (chartHeight + padding.t) + ')')
+  .call(d3.axisBottom(dayScale));
+svg.append('text')
+  .text('Days since release')
+  .attr('transform', 'translate(' + (chartWidth / 2) + ',' + (chartHeight + padding.t + 35) + ')');
+
+svg.append('g')
+  .attr('class', 'axis')
+  .attr('transform', 'translate('+ padding.l + ',0)')
+  .call(d3.axisLeft(priceScale));
+svg.append('text')
+  .text('Price ($)')
+  .attr('transform', 'translate('+ 15 + ',' + (chartHeight / 2 + 30) + '), rotate(270)');
+
+var byDate = d3.nest()
+  .key(function(d) {
+    return d['Day After Release'];
+  })
+  .entries(sales)
+
+// Calculate daily averages
+byDate.forEach(function(d) {
+  d['average'] = 0;
+  d['values'].forEach(function(e) {
+    d['average'] += parseInt(e['Sale Price'].substring(1).replace(/,/g, ""));
+  });
+  d['average'] /= d['values'].length;
+  if (parseInt(d['key']) == graphedPredictions[0]['Day After Release']) {
+    graphedPredictions[0]['yhat_lower'] = d['average'];
+    graphedPredictions[0]['yhat_upper'] = d['average'];
+    graphedPredictions[0]['yhat'] = d['average'];
+  }
+});
+
+// Add in line for daily averages
+var line = d3.line()
+  .x(function(d) {return dayScale(parseInt(d['key']))})
+  .y(function(d) {return priceScale(d['average'])})
+  .curve(d3.curveMonotoneX);
+
+// Add in lines for prediction + bounds
+var line2 = d3.line()
+  .x(function(d) {return dayScale(d['Day After Release'])})
+  .y(function(d) {return priceScale(d['yhat_lower'])})
+  .curve(d3.curveMonotoneX);
+var line3 = d3.line()
+  .x(function(d) {return dayScale(d['Day After Release'])})
+  .y(function(d) {return priceScale(d['yhat_upper'])})
+  .curve(d3.curveMonotoneX);
+var line4 = d3.line()
+  .x(function(d) {return dayScale(d['Day After Release'])})
+  .y(function(d) {return priceScale(d['yhat'])})
+  .curve(d3.curveMonotoneX);
+
+svg.append('path')
+  .datum(byDate)
+  .attr('class', 'line')
+  .attr('d', line)
+  .style('stroke', 'black')
+  .style('fill', 'none')
+  .style('stroke-width', 2);
+
+svg.append('path')
+  .datum(graphedPredictions)
+  .attr('class', 'line')
+  .attr('d', line2)
+  .style('stroke', 'lime')
+  .style('fill', 'none')
+  .style('stroke-width', 1);
+svg.append('path')
+  .datum(graphedPredictions)
+  .attr('class', 'line')
+  .attr('d', line3)
+  .style('stroke', 'lime')
+  .style('fill', 'none')
+  .style('stroke-width', 1);
+svg.append('path')
+  .datum(graphedPredictions)
+  .attr('class', 'line')
+  .attr('d', line4)
+  .style('stroke', 'green')
+  .style('fill', 'none')
+  .style('stroke-width', 2);
+
+var indexies = d3.range(graphedPredictions.length);
+
+var area = d3.area()
+  .x0(function(d) { return dayScale(d['Day After Release']); })
+  .x1(function(d, i) { return dayScale(d['Day After Release']); })
+  .y0(function(d) { return priceScale(d['yhat_lower']); })
+  .y1(function(d) { return priceScale(d['yhat_upper']); });
+
+svg.append('path')
+  .datum(graphedPredictions)
+  .attr('class', 'area')
+  .attr('d', area)
+  .style('fill', 'lime')
+  .style('fill-opacity', '0.2');
+
+var portfolio_button = document.getElementById('portfolio_button');
+portfolio_button.onclick = function(e) {
+  window.location = '/portfolio';
+};
+
+</script>
+
+<h2>Recent Sales</h2>
+
+<table id='sales_table'>
+  <tr>
+    <th align='left'>Date</th>
+    <th align='left'>Size</th>
+    <th align='left'>Price</th>
+  </tr>
+  {% for sale in mostRecent %}
+  <tr>
+    <td>{{sale['Order Date']}}</td>
+    <td>{{sale['Shoe Size']}}</td>
+    <td>{{sale['Sale Price']}}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+</body>
+</html>
